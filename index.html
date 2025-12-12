@@ -1,0 +1,808 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hobo City 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; -webkit-user-select: none; }
+        
+        /* UI СЛОЙ */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        /* HUD Верхний */
+        .hud-top { padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .stats-panel { background: rgba(30, 30, 30, 0.85); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 14px; min-width: 140px; pointer-events: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .stat-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .bar-bg { width: 80px; height: 6px; background: #444; border-radius: 3px; overflow: hidden; margin-left: 8px; }
+        .bar-fill { height: 100%; transition: width 0.3s ease; }
+        
+        .inv-btn { pointer-events: auto; width: 55px; height: 55px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.4); color: white; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        /* HUD Нижний */
+        .hud-bottom { padding: 20px; position: relative; height: 150px; }
+        
+        /* Управление */
+        #mobile-controls { position: absolute; bottom: 30px; left: 30px; width: 120px; height: 120px; pointer-events: auto; display: none; }
+        #joystick-zone { width: 100%; height: 100%; background: rgba(255,255,255,0.1); border-radius: 50%; position: relative; border: 2px solid rgba(255,255,255,0.1); }
+        #joystick-stick { width: 50px; height: 50px; background: rgba(255,255,255,0.8); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        
+        #action-btn { position: absolute; bottom: 40px; right: 30px; width: 80px; height: 80px; background: linear-gradient(135deg, #f6d365, #fda085); border-radius: 50%; border: 3px solid white; pointer-events: auto; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #333; font-size: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); opacity: 0.5; transition: transform 0.1s, opacity 0.2s; }
+        #action-btn.active { opacity: 1; transform: scale(1.1); cursor: pointer; }
+        
+        /* Уведомления */
+        #notifications { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); width: 80%; pointer-events: none; text-align: center; }
+        .notify-msg { background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 25px; margin-bottom: 10px; display: inline-block; animation: popIn 0.3s ease-out forwards; font-weight: 500; border: 1px solid rgba(255,255,255,0.2); }
+        
+        /* Модальные окна */
+        #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(3px); z-index: 1000; pointer-events: auto; justify-content: center; align-items: center; }
+        .modal-box { background: #2b2b2b; width: 90%; max-width: 400px; max-height: 80vh; border-radius: 15px; padding: 20px; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow-y: auto; border: 1px solid #444; }
+        .modal-header { font-size: 20px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #444; display: flex; justify-content: space-between; }
+        .item-row { background: #383838; margin-bottom: 8px; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .btn { border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: background 0.2s; }
+        .btn-green { background: #4CAF50; color: white; }
+        .btn-red { background: #e53935; color: white; }
+        .btn-close { background: transparent; color: #aaa; font-size: 24px; padding: 0; }
+        
+        #sleep-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:black; z-index: 2000; display:none; align-items:center; justify-content:center; color:white; font-size: 2em; opacity: 0; transition: opacity 1s;}
+
+        @keyframes popIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="stats-panel">
+                <div class="stat-row">❤️ <div class="bar-bg"><div id="hp-bar" class="bar-fill" style="background:#ef5350; width:100%"></div></div></div>
+                <div class="stat-row">🍖 <div class="bar-bg"><div id="hunger-bar" class="bar-fill" style="background:#ffa726; width:100%"></div></div></div>
+                <div class="stat-row">🥶 <div class="bar-bg"><div id="temp-bar" class="bar-fill" style="background:#42a5f5; width:100%"></div></div></div>
+                <div style="margin-top:10px; border-top:1px solid #555; padding-top:5px;">
+                    <div>💵 <span id="money-val" style="color:#66bb6a">0</span> руб.</div>
+                    <div style="font-size:12px; color:#aaa; margin-top:3px;">⏱ <span id="time-val">08:00</span></div>
+                    <div style="font-size:12px; color:#aaa;">👕 <span id="cloth-val">Лохмотья</span></div>
+                </div>
+            </div>
+            <button class="inv-btn" onclick="toggleInventory()">🎒</button>
+        </div>
+
+        <div id="notifications"></div>
+
+        <div class="hud-bottom">
+            <div id="mobile-controls">
+                <div id="joystick-zone"><div id="joystick-stick"></div></div>
+            </div>
+            <div id="action-btn">E</div>
+        </div>
+    </div>
+
+    <div id="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span id="modal-title">Инвентарь</span>
+                <button class="btn btn-close" onclick="closeModal()">×</button>
+            </div>
+            <div id="modal-content"></div>
+        </div>
+    </div>
+    
+    <div id="sleep-overlay">💤 Пропускаем ночь...</div>
+
+<script>
+/**
+ * --- GAME CONFIGURATION ---
+ */
+const CONFIG = {
+    zoneSize: 200, // Размер зоны (квартала) в 3D юнитах
+    roadWidth: 20,
+    colors: {
+        ground: [0x5D4037, 0x5D4037, 0x455A64, 0x3E2723, 0x2E7D32, 0x1565C0, 0x212121, 0x283593, 0x1A237E], // Цвета земли для 9 зон
+        road: 0x333333,
+        sidewalk: 0x555555,
+        building: [0x8D6E63, 0x795548, 0x607D8B, 0xFF7043, 0xFFCA28, 0x42A5F5, 0x9E9E9E, 0x5C6BC0, 0x3949AB],
+        lightDay: 0xffffff,
+        lightNight: 0x111122
+    }
+};
+
+/**
+ * --- GAME STATE ---
+ */
+let state = {
+    player: { x: 0, z: 0, speed: 0.3, hp: 100, hunger: 100, temp: 100, money: 0, clothLvl: 0, inventory: [], hasBed: false },
+    time: { h: 8, m: 0, speed: 20 },
+    isMobile: false,
+    interacting: null
+};
+
+// Three.js Globals
+let scene, camera, renderer, playerMesh;
+let worldObjects = []; // Interactables
+let colliders = [];    // Walls/Buildings
+let cars = [];
+let streetLights = [];
+let sunLight, ambientLight;
+
+// Input
+let keys = {};
+let joystick = { active: false, dx: 0, dy: 0 };
+
+/**
+ * --- INITIALIZATION ---
+ */
+function init() {
+    // Detect Mobile
+    state.isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if(state.isMobile) {
+        document.getElementById('mobile-controls').style.display = 'block';
+        initTouch();
+    }
+
+    // Scene Setup
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Sky color
+    scene.fog = new THREE.Fog(0x87CEEB, 100, 350);
+
+    // Camera (Isometric)
+    const aspect = window.innerWidth / window.innerHeight;
+    const d = 60;
+    camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
+    camera.position.set(100, 100, 100); // Isometric angle
+    camera.lookAt(0, 0, 0);
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('game-container').appendChild(renderer.domElement);
+
+    // Lighting
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sunLight.position.set(100, 200, 50);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.left = -200;
+    sunLight.shadow.camera.right = 200;
+    sunLight.shadow.camera.top = 200;
+    sunLight.shadow.camera.bottom = -200;
+    scene.add(sunLight);
+
+    // Generate City
+    generateCity();
+    createPlayer();
+
+    // Event Listeners
+    window.addEventListener('resize', onResize);
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false;
+        if(e.code === 'KeyE') interact();
+        if(e.code === 'KeyI') toggleInventory();
+    });
+    
+    document.getElementById('action-btn').addEventListener('click', interact);
+
+    // Load Save
+    if(localStorage.getItem('hoboCity3DSave')) loadGame();
+
+    // Start Loop
+    animate();
+    setInterval(gameTick, 1000); // Game logic every second
+    setInterval(spawnCar, 3000);
+}
+
+/**
+ * --- WORLD GENERATION (REALISTIC LAYOUT) ---
+ */
+function generateCity() {
+    // 3x3 Grid of Zones
+    const totalSize = (CONFIG.zoneSize + CONFIG.roadWidth) * 3;
+    const offset = totalSize / 2;
+
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            const zoneId = row * 3 + col;
+            const zLevel = Math.floor(zoneId / 3); // 0-poor, 1-mid, 2-rich
+            
+            // Center of the zone
+            const cx = col * (CONFIG.zoneSize + CONFIG.roadWidth) - offset + CONFIG.zoneSize/2;
+            const cz = row * (CONFIG.zoneSize + CONFIG.roadWidth) - offset + CONFIG.zoneSize/2;
+
+            createZone(cx, cz, zoneId, zLevel);
+        }
+    }
+    
+    // Create Roads (Grid)
+    const matRoad = new THREE.MeshLambertMaterial({ color: CONFIG.colors.road });
+    const fullW = (CONFIG.zoneSize + CONFIG.roadWidth) * 3 + CONFIG.roadWidth;
+    
+    // Vertical Roads
+    for(let i=0; i<=3; i++) {
+        const x = i * (CONFIG.zoneSize + CONFIG.roadWidth) - offset - CONFIG.roadWidth/2;
+        const road = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.roadWidth, fullW), matRoad);
+        road.rotation.x = -Math.PI / 2;
+        road.position.set(x + CONFIG.roadWidth/2, 0.1, 0); // slightly above ground
+        road.receiveShadow = true;
+        scene.add(road);
+    }
+    // Horizontal Roads
+    for(let i=0; i<=3; i++) {
+        const z = i * (CONFIG.zoneSize + CONFIG.roadWidth) - offset - CONFIG.roadWidth/2;
+        const road = new THREE.Mesh(new THREE.PlaneGeometry(fullW, CONFIG.roadWidth), matRoad);
+        road.rotation.x = -Math.PI / 2;
+        road.position.set(0, 0.1, z + CONFIG.roadWidth/2);
+        road.receiveShadow = true;
+        scene.add(road);
+    }
+
+    // Add Special NPCs and Shops
+    // Friend Kolyan (Start Zone)
+    createNPC(0, 0, 0xFFFF00, "friend", "Друг Колян");
+    // Recycle (Start Zone)
+    createProp(-80, -80, 0x4CAF50, "recycle", "Приёмка");
+    // Clothes Shop (Mid Zone)
+    createProp(220, 0, 0xE91E63, "shop_clothes", "Секонд-Хенд");
+    // Realtor (Rich Zone)
+    createProp(220, 220, 0x9C27B0, "shop_house", "Риелтор");
+}
+
+function createZone(cx, cz, id, level) {
+    // 1. Ground Plane (Sidewalk/Grass base)
+    const geo = new THREE.PlaneGeometry(CONFIG.zoneSize, CONFIG.zoneSize);
+    const mat = new THREE.MeshLambertMaterial({ color: CONFIG.colors.ground[id] });
+    const ground = new THREE.Mesh(geo, mat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(cx, 0, cz);
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // 2. Buildings (Realistic Placement around the block)
+    // We place buildings along the perimeter of the zone block, facing out towards roads
+    const bSize = 25; 
+    const margin = 5;
+    const slots = Math.floor(CONFIG.zoneSize / (bSize + margin));
+    
+    // Helper to place building
+    const placeBuilding = (x, z, w, d) => {
+        const h = 10 + Math.random() * 20 + (level * 20); // Height depends on richness
+        const color = CONFIG.colors.building[id];
+        
+        const bGeo = new THREE.BoxGeometry(w, h, d);
+        const bMat = new THREE.MeshStandardMaterial({ color: color });
+        const mesh = new THREE.Mesh(bGeo, bMat);
+        mesh.position.set(cx + x, h/2, cz + z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        
+        // Window (Light up at night)
+        const winGeo = new THREE.PlaneGeometry(w/2, h/2);
+        const winMat = new THREE.MeshBasicMaterial({ color: 0x222222 }); // Dark by default
+        const win = new THREE.Mesh(winGeo, winMat);
+        // Position window slightly outside
+        win.position.z = d/2 + 0.1;
+        mesh.add(win);
+        streetLights.push(winMat); // Add to list to toggle at night
+
+        // Collider logic
+        colliders.push({ 
+            minX: cx + x - w/2, maxX: cx + x + w/2, 
+            minZ: cz + z - d/2, maxZ: cz + z + d/2,
+            level: level // For access check
+        });
+    };
+
+    // Fill perimeter
+    // Top & Bottom Rows
+    for(let i=0; i<slots; i++) {
+        const offset = -CONFIG.zoneSize/2 + i*(bSize+margin) + bSize/2;
+        if(Math.random() > 0.3) placeBuilding(offset, -CONFIG.zoneSize/2 + 15, bSize, 30); // Top edge
+        if(Math.random() > 0.3) placeBuilding(offset, CONFIG.zoneSize/2 - 15, bSize, 30);  // Bottom edge
+    }
+
+    // 3. Trash Bins (Loot)
+    for(let i=0; i<6; i++) {
+        const bx = cx + (Math.random()-0.5) * (CONFIG.zoneSize - 40);
+        const bz = cz + (Math.random()-0.5) * (CONFIG.zoneSize - 40);
+        createProp(bx, bz, 0x8D6E63, 'bin', '', level);
+    }
+}
+
+function createPlayer() {
+    const geo = new THREE.CylinderGeometry(2, 2, 8, 8);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+    playerMesh = new THREE.Mesh(geo, mat);
+    playerMesh.position.set(-100, 4, -100); // Start in Slums
+    playerMesh.castShadow = true;
+    scene.add(playerMesh);
+    
+    // Simple Arrow to show facing
+    const arrow = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 4), new THREE.MeshBasicMaterial({color:0xffff00}));
+    arrow.position.set(0, 4, 2);
+    playerMesh.add(arrow);
+}
+
+function createProp(x, z, color, type, name, level = 0) {
+    let geo, mesh;
+    if(type === 'bin') {
+        geo = new THREE.BoxGeometry(4, 5, 4);
+    } else {
+        geo = new THREE.CylinderGeometry(3, 3, 1, 16); // Interact zone marker
+    }
+    
+    const mat = new THREE.MeshStandardMaterial({ color: color });
+    mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 2.5, z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    
+    // Add to interactive objects
+    worldObjects.push({
+        mesh: mesh,
+        x: x, z: z,
+        type: type,
+        name: name,
+        level: level,
+        looted: false
+    });
+    
+    // Label
+    if(name) {
+        // Very simple sprite logic could go here, but for now we rely on UI prompt
+    }
+}
+
+function createNPC(x, z, color, type, name) {
+    const geo = new THREE.CapsuleGeometry(2, 4, 4, 8);
+    const mat = new THREE.MeshStandardMaterial({ color: color });
+    const npc = new THREE.Mesh(geo, mat);
+    npc.position.set(x, 4, z);
+    npc.castShadow = true;
+    scene.add(npc);
+    
+    worldObjects.push({ x: x, z: z, type: type, name: name });
+}
+
+/**
+ * --- GAME LOGIC ---
+ */
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // Movement
+    let dx = 0, dz = 0;
+    if(keys['KeyW']) dz = -1;
+    if(keys['KeyS']) dz = 1;
+    if(keys['KeyA']) dx = -1;
+    if(keys['KeyD']) dx = 1;
+    
+    if(joystick.active) {
+        dx = joystick.dx;
+        dz = joystick.dy;
+    }
+    
+    if(dx !== 0 || dz !== 0) {
+        const nextX = playerMesh.position.x + dx * state.player.speed;
+        const nextZ = playerMesh.position.z + dz * state.player.speed;
+        
+        // Collision Check
+        let blocked = false;
+        
+        // 1. Boundaries
+        const mapLim = 400;
+        if(nextX < -mapLim || nextX > mapLim || nextZ < -mapLim || nextZ > mapLim) blocked = true;
+
+        // 2. Buildings & Zones Access
+        if(!blocked) {
+            for(let c of colliders) {
+                // Access Check (Clothing)
+                if(nextX > c.minX - 2 && nextX < c.maxX + 2 && nextZ > c.minZ - 2 && nextZ < c.maxZ + 2) {
+                    if(state.player.clothLvl < c.level) {
+                        notify(`⛔ Нужна одежда уровня ${c.level}!`);
+                        blocked = true;
+                    } else {
+                        blocked = true; // Physical wall
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if(!blocked) {
+            playerMesh.position.x = nextX;
+            playerMesh.position.z = nextZ;
+            playerMesh.rotation.y = Math.atan2(dx, dz); // Face direction
+        }
+    }
+
+    // Camera Follow
+    camera.position.x = playerMesh.position.x + 80;
+    camera.position.z = playerMesh.position.z + 80;
+    camera.lookAt(playerMesh.position.x, 0, playerMesh.position.z);
+
+    // Cars
+    updateCars();
+
+    // Interaction Check
+    checkInteraction();
+
+    renderer.render(scene, camera);
+}
+
+function spawnCar() {
+    if(cars.length > 15) return;
+    // Roads are at coords roughly -220, 0, 220
+    const roads = [-230, -110, 0, 110, 230]; // Approximate centers of roads based on generation
+    const isX = Math.random() > 0.5;
+    const roadPos = roads[Math.floor(Math.random() * roads.length)]; // Pick a road line
+    
+    const carGeo = new THREE.BoxGeometry(8, 4, 14);
+    const carMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
+    const car = new THREE.Mesh(carGeo, carMat);
+    
+    car.castShadow = true;
+    
+    let vx = 0, vz = 0;
+    const speed = 0.8 + Math.random() * 0.5;
+    
+    if(isX) {
+        // Car moves along Z axis, positioned on X
+        car.position.set(roadPos, 2, -400);
+        vz = speed;
+        car.rotation.y = 0;
+    } else {
+        // Car moves along X axis
+        car.position.set(-400, 2, roadPos);
+        vx = speed;
+        car.rotation.y = Math.PI / 2;
+    }
+    
+    scene.add(car);
+    cars.push({ mesh: car, vx: vx, vz: vz });
+}
+
+function updateCars() {
+    for(let i = cars.length - 1; i >= 0; i--) {
+        let c = cars[i];
+        c.mesh.position.x += c.vx;
+        c.mesh.position.z += c.vz;
+        
+        // Remove if far
+        if(Math.abs(c.mesh.position.x) > 450 || Math.abs(c.mesh.position.z) > 450) {
+            scene.remove(c.mesh);
+            cars.splice(i, 1);
+            continue;
+        }
+
+        // Hit Player
+        if(c.mesh.position.distanceTo(playerMesh.position) < 8) {
+            state.player.hp -= 15;
+            notify("🚗 ТЕБЯ СБИЛИ!");
+            // Bounce
+            playerMesh.position.x += c.vx * 10;
+            playerMesh.position.z += c.vz * 10;
+        }
+    }
+}
+
+function gameTick() {
+    // Time
+    state.time.m += 1;
+    if(state.time.m >= 60) {
+        state.time.m = 0;
+        state.time.h++;
+        // Hunger/Stats logic
+        state.player.hunger = Math.max(0, state.player.hunger - 2);
+        if(state.player.hunger === 0) state.player.hp -= 2;
+    }
+    if(state.time.h >= 24) {
+        state.time.h = 0;
+        worldObjects.forEach(o => { if(o.type === 'bin') o.looted = false; }); // Reset bins
+        notify("Новый день! Мусорки полны.");
+    }
+    
+    // Day/Night Visuals
+    const t = state.time.h + state.time.m/60;
+    let lightInt = 1;
+    if(t > 20 || t < 6) lightInt = 0.1; // Night
+    else if(t > 18 || t < 8) lightInt = 0.5; // Dusk/Dawn
+    
+    sunLight.intensity = Math.max(0.1, lightInt);
+    
+    // Lights on windows
+    const isNight = lightInt < 0.3;
+    scene.fog.color.setHex(isNight ? 0x050510 : 0x87CEEB);
+    scene.background.setHex(isNight ? 0x050510 : 0x87CEEB);
+    streetLights.forEach(mat => mat.color.setHex(isNight ? 0xFFFFE0 : 0x222222));
+
+    updateUI();
+}
+
+/**
+ * --- INTERACTIONS ---
+ */
+function checkInteraction() {
+    let closest = null;
+    let minDist = 15;
+    
+    // World Objects
+    worldObjects.forEach(obj => {
+        let px = obj.x; let pz = obj.z;
+        if(obj.mesh) { px = obj.mesh.position.x; pz = obj.mesh.position.z; }
+        
+        const d = Math.hypot(px - playerMesh.position.x, pz - playerMesh.position.z);
+        if(d < minDist) closest = obj;
+    });
+
+    // My Bed
+    if(state.player.hasBed) {
+        const d = Math.hypot(state.player.bedX - playerMesh.position.x, state.player.bedZ - playerMesh.position.z);
+        if(d < minDist) closest = { type: 'bed', name: "Спать" };
+    }
+
+    const btn = document.getElementById('action-btn');
+    if(closest) {
+        state.interacting = closest;
+        btn.classList.add('active');
+        btn.innerText = "E";
+    } else {
+        state.interacting = null;
+        btn.classList.remove('active');
+    }
+}
+
+function interact() {
+    if(!state.interacting) return;
+    const obj = state.interacting;
+    
+    if(obj.type === 'bin') lootBin(obj);
+    if(obj.type === 'recycle') openModal('recycle');
+    if(obj.type === 'friend') openModal('craft');
+    if(obj.type === 'shop_clothes') openModal('clothes');
+    if(obj.type === 'shop_house') openModal('house');
+    if(obj.type === 'bed') sleep();
+}
+
+function lootBin(obj) {
+    if(obj.looted) { notify("Пусто..."); return; }
+    obj.looted = true;
+    
+    const chance = Math.random();
+    // Better loot in better zones (obj.level)
+    let item = null;
+    
+    if(chance > 0.5) {
+         if(Math.random() > 0.5) item = { id: 'bottle', name: 'Бутылка', val: 5 };
+         else item = { id: 'scrap', name: 'Хлам', val: 2 };
+    } else if (chance > 0.3) {
+         item = { id: 'cardboard', name: 'Картон', val: 0 }; // Craft material
+    } else if (chance > 0.2) {
+         item = { id: 'old_cloth', name: 'Тряпки', val: 0 }; // Craft material
+    } else if (chance > 0.1) {
+         item = { id: 'food', name: 'Объедки', val: 10, type: 'food' };
+    }
+    
+    if(item) {
+        addItem(item);
+        notify(`Нашел: ${item.name}`);
+    } else {
+        notify("Ничего...");
+    }
+}
+
+/**
+ * --- UI & SYSTEMS ---
+ */
+function updateUI() {
+    document.getElementById('hp-bar').style.width = state.player.hp + "%";
+    document.getElementById('hunger-bar').style.width = state.player.hunger + "%";
+    document.getElementById('temp-bar').style.width = state.player.temp + "%";
+    document.getElementById('money-val').innerText = state.player.money;
+    
+    const h = String(state.time.h).padStart(2,0);
+    const m = String(Math.floor(state.time.m)).padStart(2,0);
+    document.getElementById('time-val').innerText = `${h}:${m}`;
+    
+    const cloths = ["Лохмотья", "Куртка", "Пальто"];
+    document.getElementById('cloth-val').innerText = cloths[state.player.clothLvl] || "Элита";
+}
+
+function notify(msg) {
+    const n = document.createElement('div');
+    n.className = 'notify-msg';
+    n.innerText = msg;
+    document.getElementById('notifications').appendChild(n);
+    setTimeout(() => n.remove(), 3000);
+}
+
+// INVENTORY SYSTEM
+function addItem(item) {
+    const ex = state.player.inventory.find(i => i.id === item.id);
+    if(ex) ex.count++; else state.player.inventory.push({...item, count: 1});
+}
+function countItem(id) {
+    const ex = state.player.inventory.find(i => i.id === id);
+    return ex ? ex.count : 0;
+}
+function removeItem(id, amt) {
+    const ex = state.player.inventory.find(i => i.id === id);
+    if(ex) { ex.count -= amt; if(ex.count <= 0) state.player.inventory = state.player.inventory.filter(i=>i.id!==id); }
+}
+
+// MODALS
+function openModal(type) {
+    const box = document.getElementById('modal-overlay');
+    const content = document.getElementById('modal-content');
+    const title = document.getElementById('modal-title');
+    box.style.display = 'flex';
+    content.innerHTML = '';
+    
+    if(type === 'inventory') {
+        title.innerText = "Рюкзак";
+        if(state.player.inventory.length === 0) content.innerHTML = "<div style='text-align:center; color:#777;'>Пусто</div>";
+        state.player.inventory.forEach(i => {
+            const row = document.createElement('div'); row.className = 'item-row';
+            row.innerHTML = `<span>${i.name} (x${i.count})</span>`;
+            if(i.type === 'food') {
+                const btn = document.createElement('button'); btn.className='btn btn-green'; btn.innerText='Есть';
+                btn.onclick = () => { state.player.hunger = Math.min(100, state.player.hunger+i.val); removeItem(i.id, 1); openModal('inventory'); };
+                row.appendChild(btn);
+            }
+            content.appendChild(row);
+        });
+    }
+    else if(type === 'recycle') {
+        title.innerText = "Сдача тары";
+        let total = 0;
+        state.player.inventory.forEach(i => { if(i.id === 'bottle') total += i.count * i.val; });
+        content.innerHTML = `<div class="item-row"><span>Бутылки: ${total} руб.</span> <button class="btn btn-green" onclick="sellBottles()">Сдать</button></div>`;
+    }
+    else if(type === 'craft') {
+        title.innerText = "Друг Колян";
+        const c1 = countItem('cardboard'); const c2 = countItem('old_cloth');
+        content.innerHTML = `
+            <p>Чтобы спать спокойно, нужна лежанка.</p>
+            <div class="item-row">Картон: ${c1}/3</div>
+            <div class="item-row">Тряпки: ${c2}/4</div>
+            <button class="btn btn-green" style="width:100%" onclick="craftBed()">🛠️ Скрафтить</button>
+        `;
+    }
+    else if(type === 'clothes') {
+        title.innerText = "Секонд-Хенд";
+        content.innerHTML = `
+            <div class="item-row"><span>Куртка (Зона 2)</span> <button class="btn btn-green" onclick="buyCloth(1, 200)">200р</button></div>
+            <div class="item-row"><span>Пальто (Зона 3)</span> <button class="btn btn-green" onclick="buyCloth(2, 1000)">1000р</button></div>
+        `;
+    }
+    else if(type === 'house') {
+        title.innerText = "Недвижимость";
+        content.innerHTML = `
+            <div class="item-row"><span>Квартира</span> <button class="btn btn-green" onclick="buyHouse(5000)">5000р</button></div>
+        `;
+    }
+}
+
+function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+function toggleInventory() { openModal('inventory'); }
+
+// ACTIONS
+window.sellBottles = () => {
+    let total = 0;
+    state.player.inventory.forEach(i => { if(i.id === 'bottle') total += i.count * i.val; });
+    state.player.money += total;
+    removeItem('bottle', 999);
+    closeModal();
+    notify(`Получено ${total} руб.`);
+};
+
+window.craftBed = () => {
+    if(state.player.hasBed) { notify("У тебя уже есть дом!"); return; }
+    if(countItem('cardboard') >= 3 && countItem('old_cloth') >= 4) {
+        removeItem('cardboard', 3); removeItem('old_cloth', 4);
+        state.player.hasBed = true;
+        state.player.bedX = playerMesh.position.x + 10;
+        state.player.bedZ = playerMesh.position.z;
+        
+        // Visual Bed
+        const bed = new THREE.Mesh(new THREE.BoxGeometry(8, 2, 12), new THREE.MeshStandardMaterial({color:0xffaa00}));
+        bed.position.set(state.player.bedX, 1, state.player.bedZ);
+        scene.add(bed);
+        
+        notify("Лежанка готова!"); closeModal();
+    } else notify("Не хватает ресурсов");
+};
+
+window.buyCloth = (lvl, price) => {
+    if(state.player.money >= price) {
+        if(state.player.clothLvl >= lvl) { notify("Уже куплено"); return; }
+        state.player.money -= price;
+        state.player.clothLvl = lvl;
+        notify("Куплено!"); closeModal();
+    } else notify("Нет денег");
+};
+
+window.buyHouse = (price) => {
+    if(state.player.money >= price) {
+        state.player.money -= price;
+        notify("Вы купили квартиру! Игра пройдена (пока что)");
+        closeModal();
+    } else notify("Дороговато...");
+};
+
+function sleep() {
+    const ol = document.getElementById('sleep-overlay');
+    ol.style.display = 'flex';
+    ol.style.opacity = 1;
+    setTimeout(() => {
+        state.time.h = 7; state.time.m = 0;
+        state.player.hp = 100; state.player.hunger -= 20;
+        ol.style.opacity = 0;
+        setTimeout(() => ol.style.display = 'none', 1000);
+        notify("Вы выспались");
+    }, 2000);
+}
+
+// UTIL
+function onResize() {
+    const aspect = window.innerWidth / window.innerHeight;
+    const d = 60;
+    camera.left = -d * aspect; camera.right = d * aspect;
+    camera.top = d; camera.bottom = -d;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function initTouch() {
+    const z = document.getElementById('joystick-zone');
+    const s = document.getElementById('joystick-stick');
+    let startX, startY;
+    
+    z.addEventListener('touchstart', e => {
+        joystick.active = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+    });
+    
+    z.addEventListener('touchmove', e => {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        const dist = Math.min(30, Math.hypot(dx, dy));
+        const angle = Math.atan2(dy, dx);
+        
+        s.style.transform = `translate(calc(-50% + ${Math.cos(angle)*dist}px), calc(-50% + ${Math.sin(angle)*dist}px))`;
+        joystick.dx = Math.cos(angle) * (dist/30);
+        joystick.dy = Math.sin(angle) * (dist/30);
+    });
+    
+    z.addEventListener('touchend', () => {
+        joystick.active = false; joystick.dx = 0; joystick.dy = 0;
+        s.style.transform = `translate(-50%, -50%)`;
+    });
+}
+
+function saveGame() {
+    localStorage.setItem('hoboCity3DSave', JSON.stringify({
+        player: state.player,
+        time: state.time
+    }));
+}
+function loadGame() {
+    const s = JSON.parse(localStorage.getItem('hoboCity3DSave'));
+    if(s) { state.player = {...state.player, ...s.player}; state.time = {...state.time, ...s.time}; }
+}
+
+// Start
+init();
+
+</script>
+</body>
+</html>
