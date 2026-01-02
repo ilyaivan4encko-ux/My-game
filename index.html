@@ -1,16 +1,207 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>BomzhSim</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-    <style>
-      body { margin:0; background: #222; color:#fff; font-family: Arial, sans-serif; }
-      #game { width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; }
-    </style>
-  </head>
-  <body>
-    <div id="game"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Моя маленькая</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: 'Playfair Display', serif;
+    background: radial-gradient(circle at top, #ff7eb3, #fad0c4, #a18cd1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* ===== АНИМИРОВАННЫЕ BLOBS ===== */
+.blob {
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(255,105,180,0.8), transparent 70%);
+    filter: blur(60px);
+    animation: blobMove 20s infinite alternate ease-in-out;
+}
+
+.blob:nth-child(1) {
+    top: -100px;
+    left: -100px;
+}
+
+.blob:nth-child(2) {
+    bottom: -120px;
+    right: -120px;
+    animation-duration: 25s;
+    background: radial-gradient(circle, rgba(255,182,193,0.8), transparent 70%);
+}
+
+@keyframes blobMove {
+    from { transform: translate(0,0) scale(1); }
+    to { transform: translate(120px, 80px) scale(1.2); }
+}
+
+/* ===== ЧАСТИЦЫ ===== */
+canvas {
+    position: absolute;
+    inset: 0;
+}
+
+/* ===== ЦЕНТР ===== */
+.container {
+    position: relative;
+    text-align: center;
+    z-index: 2;
+    padding: 40px 30px;
+}
+
+.text {
+    font-size: 56px;
+    color: white;
+    letter-spacing: 3px;
+    text-shadow:
+        0 0 12px rgba(255,255,255,0.6),
+        0 0 30px rgba(255,105,180,0.9);
+}
+
+/* Буквы */
+.letter {
+    opacity: 0;
+    display: inline-block;
+    transform: translateY(25px) scale(0.9);
+    animation: letterIn 0.7s forwards;
+}
+
+@keyframes letterIn {
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.hearts {
+    margin-top: 25px;
+    font-size: 32px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+    100% { transform: translateY(0); }
+}
+
+/* Летающие сердечки */
+.heart {
+    position: absolute;
+    bottom: -40px;
+    animation: fly linear infinite;
+}
+
+@keyframes fly {
+    from {
+        transform: translateY(0) scale(0.6) rotate(0deg);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(-130vh) scale(1.4) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+/* 📱 Телефон */
+@media (max-width: 600px) {
+    .text {
+        font-size: 38px;
+        letter-spacing: 2px;
+    }
+    .hearts {
+        font-size: 26px;
+    }
+}
+</style>
+</head>
+<body>
+
+<div class="blob"></div>
+<div class="blob"></div>
+
+<canvas id="particles"></canvas>
+
+<div class="container">
+    <div class="text" id="text"></div>
+    <div class="hearts">❤️ 💕 💖 ❤️</div>
+</div>
+
+<script>
+// ===== ТЕКСТ ПО БУКВАМ =====
+const phrase = "моя маленькая";
+const textEl = document.getElementById("text");
+
+phrase.split("").forEach((char, i) => {
+    const span = document.createElement("span");
+    span.className = "letter";
+    span.textContent = char === " " ? "\u00A0" : char;
+    span.style.animationDelay = i * 0.18 + "s";
+    textEl.appendChild(span);
+});
+
+// ===== ЛЕТАЮЩИЕ СЕРДЕЧКИ =====
+const heartIcons = ['❤️','💕','💖','💗','💘'];
+
+function createHeart() {
+    const h = document.createElement("div");
+    h.className = "heart";
+    h.textContent = heartIcons[Math.floor(Math.random() * heartIcons.length)];
+    h.style.left = Math.random() * 100 + "vw";
+    h.style.fontSize = (18 + Math.random() * 26) + "px";
+    h.style.animationDuration = (6 + Math.random() * 6) + "s";
+    document.body.appendChild(h);
+    setTimeout(() => h.remove(), 12000);
+}
+setInterval(createHeart, 280);
+
+// ===== ЧАСТИЦЫ (ЗВЁЗДЫ) =====
+const canvas = document.getElementById("particles");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+}
+resize();
+addEventListener("resize", resize);
+
+const particles = Array.from({length: 80}, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: Math.random() * 2 + 1,
+    v: Math.random() * 0.4 + 0.2
+}));
+
+function animate() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles.forEach(p => {
+        p.y -= p.v;
+        if (p.y < 0) p.y = canvas.height;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.fill();
+    });
+    requestAnimationFrame(animate);
+}
+animate();
+</script>
+
+</body>
 </html>
